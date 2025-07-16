@@ -1,52 +1,47 @@
 import streamlit as st
 from transformers import pipeline
 
-# Load models (no sentencepiece models)
+# Load all models once
 @st.cache_resource
-def load_models():
-    sentiment_model = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-    ner_model = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-    
-    # Using MarianMT models (don't need sentencepiece)
-    translation_models = {
-        "Hindi": pipeline("translation", model="Helsinki-NLP/opus-mt-en-hi"),
-        "French": pipeline("translation", model="Helsinki-NLP/opus-mt-en-fr"),
-        "Tamil": pipeline("translation", model="Helsinki-NLP/opus-mt-en-ta"),
+def load_pipelines():
+    sentiment = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    ner = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
+    translate_hi = pipeline("translation_en_to_hi", model="Helsinki-NLP/opus-mt-en-hi")
+    translate_fr = pipeline("translation_en_to_fr", model="Helsinki-NLP/opus-mt-en-fr")
+    translate_ta = pipeline("translation_en_to_ta", model="Helsinki-NLP/opus-mt-en-ta")
+    return sentiment, ner, {
+        "Hindi": translate_hi,
+        "French": translate_fr,
+        "Tamil": translate_ta
     }
-    
-    return sentiment_model, ner_model, translation_models
 
-sentiment_model, ner_model, translation_models = load_models()
+sentiment_pipeline, ner_pipeline, translators = load_pipelines()
 
 # UI
 st.set_page_config(page_title="Mini NLP Assistant", layout="centered")
-st.title("🤖 Mini NLP AI Assistant")
-st.markdown("Enter an English sentence to get Sentiment, Entities, and Translation.")
+st.title("🧠 Mini NLP AI Assistant")
+st.markdown("Analyze a sentence for **Sentiment**, **Named Entities**, and **Translation**.")
 
-# Input
-sentence = st.text_area("Type your sentence here:", height=100)
-language = st.selectbox("Select language for translation", ["Hindi", "Tamil", "French"])
+sentence = st.text_area("Enter an English sentence:")
 
-if st.button("Analyze"):
+lang = st.selectbox("Choose translation language:", ["Hindi", "Tamil", "French"])
+
+if st.button("Run Analysis"):
     if not sentence.strip():
         st.warning("Please enter a sentence.")
     else:
-        with st.spinner("Analyzing..."):
-            # Sentiment
-            st.subheader("🧠 Sentiment Analysis")
-            sentiment = sentiment_model(sentence)[0]
-            st.success(f"{sentiment['label']} ({sentiment['score']:.2f})")
+        st.subheader("📊 Sentiment Analysis")
+        result = sentiment_pipeline(sentence)[0]
+        st.write(f"**Label**: {result['label']}, **Score**: {result['score']:.2f}")
 
-            # NER
-            st.subheader("📍 Named Entity Recognition")
-            entities = ner_model(sentence)
-            if entities:
-                for ent in entities:
-                    st.write(f"{ent['entity_group']}: {ent['word']} ({ent['score']:.2f})")
-            else:
-                st.info("No named entities found.")
+        st.subheader("🧾 Named Entity Recognition")
+        entities = ner_pipeline(sentence)
+        if entities:
+            for e in entities:
+                st.write(f"{e['entity_group']}: {e['word']} ({e['score']:.2f})")
+        else:
+            st.info("No entities found.")
 
-            # Translation
-            st.subheader(f"🌐 Translated to {language}")
-            translated = translation_models[language](sentence)
-            st.write(translated[0]['translation_text'])
+        st.subheader("🌍 Translation")
+        translated = translators[lang](sentence)[0]['translation_text']
+        st.success(f"**{lang}**: {translated}")
