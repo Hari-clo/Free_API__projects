@@ -2,62 +2,56 @@ import streamlit as st
 import requests
 from transformers import pipeline
 
-# Load Hugging Face models
+# Load Hugging Face models (cached to avoid reloading)
 @st.cache_resource
 def load_models():
-    sentiment_pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-    ner_pipe = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-    return sentiment_pipe, ner_pipe
+    sentiment = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    ner = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
+    return sentiment, ner
 
 sentiment_model, ner_model = load_models()
 
-# LibreTranslate API for translation
-def translate_libre(text, target_lang):
+# Translation using LibreTranslate API (no key)
+def translate_text(text, lang_code):
     try:
-        response = requests.post(
-            "https://libretranslate.com/translate",
-            data={
-                "q": text,
-                "source": "en",
-                "target": target_lang,
-                "format": "text"
-            }
-        )
-        result = response.json()
-        return result.get("translatedText", "⚠️ Translation failed.")
+        response = requests.post("https://libretranslate.com/translate", data={
+            "q": text,
+            "source": "en",
+            "target": lang_code,
+            "format": "text"
+        })
+        return response.json().get("translatedText", "⚠️ Translation failed.")
     except Exception as e:
         return f"⚠️ Error: {e}"
 
 # Streamlit UI
 st.set_page_config(page_title="GenAI NLP Assistant", layout="centered")
 st.title("🤖 GenAI NLP Assistant")
-st.markdown("Enter an English sentence to perform:")
-st.markdown("- Sentiment Analysis 💬")
-st.markdown("- Named Entity Recognition 🧠")
-st.markdown("- Translation 🌍")
+st.markdown("Perform Sentiment Analysis, Named Entity Recognition, and Translation 🌐")
 
-sentence = st.text_area("✍️ Input Sentence", height=120)
-target_lang = st.selectbox("🌐 Translate To:", {"Hindi": "hi", "Tamil": "ta", "French": "fr"})
+text_input = st.text_area("📝 Enter an English sentence:")
+lang = st.selectbox("🌍 Translate to:", {"Hindi": "hi", "Tamil": "ta", "French": "fr"})
 
-if st.button("Generate Results"):
-    if not sentence.strip():
-        st.warning("Please enter a valid sentence.")
+if st.button("Run NLP"):
+    if not text_input.strip():
+        st.warning("Please enter a sentence.")
     else:
         # Sentiment
         st.subheader("💬 Sentiment Analysis")
-        sentiment_result = sentiment_model(sentence)[0]
-        st.write(f"**Label**: {sentiment_result['label']}, **Confidence**: {sentiment_result['score']:.2f}")
+        sentiment = sentiment_model(text_input)[0]
+        st.write(f"**Label:** {sentiment['label']}")
+        st.write(f"**Confidence:** {sentiment['score']:.2f}")
 
         # NER
         st.subheader("🧠 Named Entity Recognition")
-        ner_results = ner_model(sentence)
-        if ner_results:
-            for ent in ner_results:
-                st.write(f"• **{ent['entity_group']}** → {ent['word']} ({ent['score']:.2f})")
+        entities = ner_model(text_input)
+        if entities:
+            for e in entities:
+                st.write(f"- **{e['entity_group']}**: {e['word']} ({e['score']:.2f})")
         else:
-            st.info("No named entities detected.")
+            st.info("No named entities found.")
 
         # Translation
-        st.subheader(f"🌍 Translated to {target_lang}")
-        translation = translate_libre(sentence, target_lang)
-        st.success(translation)
+        st.subheader(f"🌐 Translation ({lang})")
+        translated = translate_text(text_input, lang)
+        st.success(translated)
