@@ -1,38 +1,75 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="DeepAI Text-to-Image", layout="centered")
+# ✅ Your API Key
+API_KEY = "pub_90a23434a6d64d68b1fe125a8fb5b3d7"
 
-st.title("🎨 DeepAI Text-to-Image Generator")
-st.markdown("Turn words into art using [DeepAI's API](https://deepai.org/).")
+# 🌍 Country codes
+COUNTRIES = {
+    "India 🇮🇳": "in",
+    "United States 🇺🇸": "us",
+    "United Kingdom 🇬🇧": "gb",
+    "Australia 🇦🇺": "au",
+    "Canada 🇨🇦": "ca",
+    "Germany 🇩🇪": "de",
+    "France 🇫🇷": "fr",
+    "Japan 🇯🇵": "jp",
+    "Italy 🇮🇹": "it",
+    "Russia 🇷🇺": "ru",
+    "Brazil 🇧🇷": "br",
+    "Spain 🇪🇸": "es",
+    "South Korea 🇰🇷": "kr",
+    "Singapore 🇸🇬": "sg",
+    "Turkey 🇹🇷": "tr",
+    "South Africa 🇿🇦": "za",
+    "Mexico 🇲🇽": "mx",
+    "Saudi Arabia 🇸🇦": "sa",
+    "Nigeria 🇳🇬": "ng",
+    "UAE 🇦🇪": "ae"
+}
 
-# Text input
-prompt = st.text_input("🖊️ Enter your prompt:", "a cyberpunk city at night with neon lights")
+# 📂 News categories
+CATEGORIES = [
+    "top", "business", "entertainment", "environment", "food",
+    "health", "politics", "science", "sports", "technology",
+    "tourism", "world"
+]
 
-# API Key
-api_key = st.text_input("🔐 Enter your DeepAI API Key:", type="password")
+# 🔍 Fetching logic
+def fetch_news(country_name, category):
+    country_code = COUNTRIES[country_name]
+    url = f"https://newsdata.io/api/1/news?apikey={API_KEY}&country={country_code}&category={category}&language=en"
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
 
-# Button
-if st.button("🚀 Generate Image"):
-    if not api_key:
-        st.warning("Please provide your API key.")
-    else:
-        with st.spinner("Generating image..."):
-            try:
-                response = requests.post(
-                    "https://api.deepai.org/api/text2img",
-                    data={'text': prompt},
-                    headers={'api-key': api_key}
-                )
-                result = response.json()
+        if "results" not in data or not data["results"]:
+            return None, "⚠️ No news found for this category or country."
 
-                if "output_url" in result:
-                    st.image(result["output_url"], caption=prompt)
-                    st.success("✅ Image generated successfully!")
-                    st.markdown(f"[🖼️ View Full Image]({result['output_url']})")
-                else:
-                    st.error("❌ Failed to generate image.")
-            except Exception as e:
-                st.error(f"⚠️ Error: {e}")
+        return data["results"][:5], None  # return top 5
+    except Exception as e:
+        return None, f"❌ Error fetching news: {e}"
 
-st.markdown("""🔐 **Note:** This app uses [DeepAI](https://deepai.org/) API. Each user must use their own key.""")
+# 🌟 Streamlit UI
+st.set_page_config(page_title="🗞️ Real-Time News App", layout="centered")
+st.title("🗞️ Real-Time News App")
+st.markdown("Get the latest headlines by country and category — powered by [NewsData.io](https://newsdata.io)")
+
+# Dropdowns
+country_choice = st.selectbox("🌍 Select Country", list(COUNTRIES.keys()), index=0)
+category_choice = st.selectbox("🗂️ Select News Category", CATEGORIES, index=0)
+
+# Fetch button
+if st.button("🚀 Fetch News"):
+    with st.spinner("Fetching news..."):
+        news_list, error = fetch_news(country_choice, category_choice)
+
+        if error:
+            st.warning(error)
+        else:
+            for article in news_list:
+                st.markdown(f"### 📰 {article['title']}")
+                if article.get("description"):
+                    st.markdown(article["description"])
+                st.markdown(f"[🔗 Read more]({article['link']})")
+                st.markdown("---")
