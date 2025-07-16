@@ -1,51 +1,52 @@
 import streamlit as st
 from transformers import pipeline
 
-# Load Hugging Face Pipelines
+# Load models (no sentencepiece models)
 @st.cache_resource
 def load_models():
     sentiment_model = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
     ner_model = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
+    
+    # Using MarianMT models (don't need sentencepiece)
     translation_models = {
-        "Hindi": pipeline("translation_en_to_hi", model="Helsinki-NLP/opus-mt-en-hi"),
-        "Tamil": pipeline("translation_en_to_ta", model="Helsinki-NLP/opus-mt-en-ta"),
-        "French": pipeline("translation_en_to_fr", model="Helsinki-NLP/opus-mt-en-fr"),
+        "Hindi": pipeline("translation", model="Helsinki-NLP/opus-mt-en-hi"),
+        "French": pipeline("translation", model="Helsinki-NLP/opus-mt-en-fr"),
+        "Tamil": pipeline("translation", model="Helsinki-NLP/opus-mt-en-ta"),
     }
+    
     return sentiment_model, ner_model, translation_models
 
 sentiment_model, ner_model, translation_models = load_models()
 
-# Streamlit UI
-st.set_page_config(page_title="Mini NLP AI Assistant", layout="centered")
-st.title("🧠 Mini NLP AI Assistant")
-st.markdown("Enter an English sentence and get sentiment, named entities, and translation 🌍")
+# UI
+st.set_page_config(page_title="Mini NLP Assistant", layout="centered")
+st.title("🤖 Mini NLP AI Assistant")
+st.markdown("Enter an English sentence to get Sentiment, Entities, and Translation.")
 
-# Input Section
-sentence = st.text_area("Enter a sentence in English:", height=100)
-
-lang = st.selectbox("Choose target language for translation", ["Hindi", "Tamil", "French"])
+# Input
+sentence = st.text_area("Type your sentence here:", height=100)
+language = st.selectbox("Select language for translation", ["Hindi", "Tamil", "French"])
 
 if st.button("Analyze"):
-    if sentence.strip() == "":
-        st.warning("⚠️ Please enter a sentence.")
+    if not sentence.strip():
+        st.warning("Please enter a sentence.")
     else:
         with st.spinner("Analyzing..."):
             # Sentiment
+            st.subheader("🧠 Sentiment Analysis")
             sentiment = sentiment_model(sentence)[0]
-            st.subheader("🔍 Sentiment Analysis")
-            st.write(f"**Label**: {sentiment['label']}")
-            st.write(f"**Confidence**: {sentiment['score']:.2f}")
+            st.success(f"{sentiment['label']} ({sentiment['score']:.2f})")
 
             # NER
-            st.subheader("🧠 Named Entity Recognition")
+            st.subheader("📍 Named Entity Recognition")
             entities = ner_model(sentence)
             if entities:
                 for ent in entities:
-                    st.write(f"**{ent['entity_group']}** → {ent['word']} (score: {ent['score']:.2f})")
+                    st.write(f"{ent['entity_group']}: {ent['word']} ({ent['score']:.2f})")
             else:
                 st.info("No named entities found.")
 
             # Translation
-            st.subheader("🌐 Translation")
-            translated = translation_models[lang](sentence)
-            st.write(f"**Translated to {lang}**: {translated[0]['translation_text']}")
+            st.subheader(f"🌐 Translated to {language}")
+            translated = translation_models[language](sentence)
+            st.write(translated[0]['translation_text'])
