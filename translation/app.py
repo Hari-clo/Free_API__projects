@@ -1,64 +1,52 @@
 import streamlit as st
-import requests
 from transformers import pipeline
 
-# 🔄 Load NLP models once (cached)
+# Load all models at once (cached)
 @st.cache_resource
 def load_models():
     sentiment = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
     ner = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-    return sentiment, ner
+    translators = {
+        "Hindi": pipeline("translation_en_to_hi", model="Helsinki-NLP/opus-mt-en-hi"),
+        "Tamil": pipeline("translation_en_to_ta", model="Helsinki-NLP/opus-mt-en-ta"),
+        "French": pipeline("translation_en_to_fr", model="Helsinki-NLP/opus-mt-en-fr")
+    }
+    return sentiment, ner, translators
 
-sentiment_model, ner_model = load_models()
+sentiment_model, ner_model, translator_models = load_models()
 
-# 🌐 Translate using stable LibreTranslate mirror
-def translate_text(text, lang_code):
-    try:
-        response = requests.post("https://translate.argosopentech.com/translate", data={
-            "q": text,
-            "source": "en",
-            "target": lang_code,
-            "format": "text"
-        })
-        return response.json().get("translatedText", "⚠️ Translation failed.")
-    except Exception as e:
-        return f"⚠️ Error: {e}"
-
-# 🎨 Streamlit UI setup
+# Streamlit UI
 st.set_page_config(page_title="GenAI NLP Assistant", layout="centered")
 st.title("🤖 GenAI NLP Assistant")
-st.markdown("Enter an English sentence to get:")
-st.markdown("- 💬 Sentiment Analysis")
-st.markdown("- 🧠 Named Entity Recognition")
-st.markdown("- 🌍 Translation")
+st.markdown("Perform 💬 Sentiment, 🧠 NER, and 🌍 Translation using Hugging Face models.")
 
-# ✍️ User input
-text_input = st.text_area("📝 Enter your sentence:", height=120)
-lang = st.selectbox("🌐 Translate to:", {"Hindi": "hi", "Tamil": "ta", "French": "fr"})
+# Input
+text_input = st.text_area("📝 Enter your English sentence:", height=120)
+target_lang = st.selectbox("🌐 Translate to:", ["Hindi", "Tamil", "French"])
 
 if st.button("Run NLP Tasks"):
     if not text_input.strip():
         st.warning("⚠️ Please enter a sentence.")
     else:
-        # 👉 Optionally capitalize text for better NER
         cleaned_text = text_input.strip().capitalize()
 
-        # 💬 Sentiment Analysis
+        # Sentiment Analysis
         st.subheader("💬 Sentiment Analysis")
         sentiment = sentiment_model(cleaned_text)[0]
         st.write(f"**Label:** {sentiment['label']}")
         st.write(f"**Confidence:** {sentiment['score']:.2f}")
 
-        # 🧠 Named Entity Recognition
+        # NER
         st.subheader("🧠 Named Entity Recognition")
-        ner_results = ner_model(cleaned_text)
-        if ner_results:
-            for ent in ner_results:
+        ner_result = ner_model(cleaned_text)
+        if ner_result:
+            for ent in ner_result:
                 st.write(f"- **{ent['entity_group']}** → {ent['word']} ({ent['score']:.2f})")
         else:
             st.info("No named entities found.")
 
-        # 🌍 Translation
-        st.subheader(f"🌍 Translation to {lang}")
-        translation = translate_text(text_input, lang)
-        st.success(translation)
+        # Translation using Hugging Face
+        st.subheader(f"🌍 Translation to {target_lang}")
+        translator = translator_models[target_lang]
+        translated = translator(cleaned_text)
+        st.success(translated[0]['translation_text'])
