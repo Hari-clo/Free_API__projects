@@ -1,36 +1,46 @@
 import streamlit as st
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import (
+    pipeline,
+    AutoTokenizer,
+    AutoModelForSeq2SeqLM
+)
 
-# Load sentiment & NER models (unchanged)
+# Load Sentiment & NER pipelines
 @st.cache_resource
 def load_sentiment_ner():
     sentiment = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
     ner = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
     return sentiment, ner
 
-# Load multilingual translator (NLLB model)
+# Load NLLB translation model
 @st.cache_resource
-def load_translator():
+def load_translation_model():
     model_name = "facebook/nllb-200-distilled-600M"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    return pipeline("translation", model=model, tokenizer=tokenizer)
+    translator = pipeline("translation", model=model, tokenizer=tokenizer)
+    return translator
 
-# Language code mapping (NLLB uses ISO 639-3)
+# Language Code Mapping for NLLB
 LANG_CODES = {
     "Hindi": "hin_Deva",
     "Tamil": "tam_Taml",
     "French": "fra_Latn"
 }
 
-sentiment_model, ner_model = load_sentiment_ner()
-translation_pipeline = load_translator()
+# Load models
+sentiment_pipeline, ner_pipeline = load_sentiment_ner()
+translator_pipeline = load_translation_model()
 
-# Streamlit UI
+# UI Setup
 st.set_page_config(page_title="GenAI NLP Assistant", layout="centered")
 st.title("🤖 GenAI NLP Assistant")
-st.markdown("Perform 💬 Sentiment, 🧠 NER, and 🌍 Translation (without failures)")
+st.markdown("Analyze your sentence with:")
+st.markdown("- 💬 Sentiment Analysis")
+st.markdown("- 🧠 Named Entity Recognition")
+st.markdown("- 🌍 Translation")
 
+# User Input
 text_input = st.text_area("📝 Enter your English sentence:", height=120)
 target_lang = st.selectbox("🌐 Translate to:", ["Hindi", "Tamil", "French"])
 
@@ -40,23 +50,31 @@ if st.button("Run NLP Tasks"):
     else:
         cleaned_text = text_input.strip().capitalize()
 
-        # Sentiment
+        # 🔹 Sentiment Analysis
         st.subheader("💬 Sentiment Analysis")
-        sentiment = sentiment_model(cleaned_text)[0]
+        sentiment = sentiment_pipeline(cleaned_text)[0]
         st.write(f"**Label:** {sentiment['label']}")
         st.write(f"**Confidence:** {sentiment['score']:.2f}")
 
-        # NER
+        # 🔹 Named Entity Recognition
         st.subheader("🧠 Named Entity Recognition")
-        ner_result = ner_model(cleaned_text)
-        if ner_result:
-            for ent in ner_result:
+        ner_results = ner_pipeline(cleaned_text)
+        if ner_results:
+            for ent in ner_results:
                 st.write(f"- **{ent['entity_group']}** → {ent['word']} ({ent['score']:.2f})")
         else:
             st.info("No named entities found.")
 
-        # Translation
+        # 🔹 Translation using NLLB
         st.subheader(f"🌍 Translation to {target_lang}")
         lang_code = LANG_CODES[target_lang]
-        translated = translation_pipeline(cleaned_text, src_lang="eng_Latn", tgt_lang=lang_code)
-        st.success(translated[0]['translation_text'])
+        try:
+            translated = translator_pipeline(
+                cleaned_text,
+                src_lang="eng_Latn",
+                tgt_lang=lang_code,
+                max_length=200
+            )
+            st.success(translated[0]['translation_text'])
+        except Exception as e:
+            st.error(f"❌ Translation failed: {str(e)}")
